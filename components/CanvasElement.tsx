@@ -1,8 +1,7 @@
 
-
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ReportElement } from '../types';
+import { ReportElement, TableColumn } from '../types';
 import { Trash2, GripVertical, Image as ImageIcon, BarChart, QrCode } from 'lucide-react';
 
 interface CanvasElementProps {
@@ -11,7 +10,7 @@ interface CanvasElementProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
-  onDragEnd: () => void;
+  onDragEnd?: () => void;
 }
 
 export const CanvasElement: React.FC<CanvasElementProps> = ({
@@ -49,7 +48,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       
-      if (wasDragging && hasMoved) {
+      if (wasDragging && hasMoved && onDragEnd) {
         onDragEnd();
       }
     };
@@ -82,6 +81,59 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
     textAlign: element.style.textAlign || 'left',
     color: element.style.color || 'inherit',
     width: '100%',
+  };
+
+  const renderTable = () => {
+        const headerBg = element.style.tableHeaderBg || '#f4f4f5';
+        const headerColor = element.style.tableHeaderColor || '#18181b';
+        const rowBg = element.style.tableRowBg || 'transparent';
+        const stripeColor = element.style.tableStripeColor || '#f8fafc';
+        const showGrid = element.style.tableShowGrid !== false;
+        const gridColor = element.style.borderColor || '#e4e4e7';
+        
+        const cellStyle = {
+            border: showGrid ? `1px solid ${gridColor}` : 'none',
+            padding: '8px 12px',
+        };
+
+        const columns: TableColumn[] = element.columns || [
+            { id: '1', header: 'Col 1', accessorKey: 'col1' },
+            { id: '2', header: 'Col 2', accessorKey: 'col2' }
+        ];
+
+        return (
+          <div className="w-full overflow-hidden" style={{ color: element.style.color }}>
+            <table className="w-full border-collapse text-sm table-fixed">
+                <colgroup>
+                    {columns.map(col => <col key={col.id} style={{ width: col.width ? `${col.width}px` : 'auto' }} />)}
+                </colgroup>
+                <thead>
+                    <tr style={{ backgroundColor: headerBg, color: headerColor }}>
+                        {columns.map(col => (
+                            <th key={col.id} style={{ ...cellStyle, textAlign: col.align || 'left' }}>
+                                {col.header}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {[1, 2, 3].map((row, idx) => {
+                        const isEven = idx % 2 !== 0;
+                        const rowBackground = element.style.tableStriped && isEven ? stripeColor : rowBg;
+                        return (
+                            <tr key={row} style={{ backgroundColor: rowBackground }}>
+                                {columns.map(col => (
+                                    <td key={col.id} style={{ ...cellStyle, textAlign: col.align || 'left' }}>
+                                        <span className="opacity-50 text-xs">[{col.accessorKey}]</span>
+                                    </td>
+                                ))}
+                            </tr>
+                        )
+                    })}
+                </tbody>
+            </table>
+          </div>
+        );
   };
 
   const getRenderContent = () => {
@@ -205,44 +257,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
             );
 
       case 'table':
-        const headerBg = element.style.tableHeaderBg || '#f4f4f5';
-        const headerColor = element.style.tableHeaderColor || '#18181b';
-        const rowBg = element.style.tableRowBg || 'transparent';
-        const stripeColor = element.style.tableStripeColor || '#f8fafc';
-        const showGrid = element.style.tableShowGrid !== false;
-        const gridColor = element.style.borderColor || '#e4e4e7';
-        
-        const cellStyle = {
-            border: showGrid ? `1px solid ${gridColor}` : 'none',
-            padding: '8px 12px',
-        };
-
-        return (
-          <div className="w-full overflow-hidden" style={{ color: element.style.color }}>
-            <table className="w-full border-collapse text-sm">
-                <thead>
-                    <tr style={{ backgroundColor: headerBg, color: headerColor }}>
-                        <th style={{ ...cellStyle, textAlign: 'left' }}>Item</th>
-                        <th style={{ ...cellStyle, textAlign: 'right' }}>Qty</th>
-                        <th style={{ ...cellStyle, textAlign: 'right' }}>Price</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {[1, 2, 3].map((row, idx) => {
-                        const isEven = idx % 2 !== 0;
-                        const rowBackground = element.style.tableStriped && isEven ? stripeColor : rowBg;
-                        return (
-                            <tr key={row} style={{ backgroundColor: rowBackground }}>
-                                <td style={cellStyle}>Product {row}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>{row * 2}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>${(row * 15).toFixed(2)}</td>
-                            </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
-          </div>
-        );
+        return renderTable();
 
       case 'image':
         if (!element.src) {

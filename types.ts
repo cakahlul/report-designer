@@ -1,5 +1,4 @@
 
-
 export type ElementType = 
   | 'text' 
   | 'table' 
@@ -47,9 +46,12 @@ export interface ElementStyle {
 }
 
 export interface TableColumn {
-  name: string;
-  key: string;
+  id: string;
+  header: string;
+  accessorKey: string;
   width?: number;
+  align?: 'left' | 'center' | 'right';
+  group?: string;
 }
 
 export interface SnapGuide {

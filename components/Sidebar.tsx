@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -7,7 +6,7 @@ import {
   Minus, Square, Barcode, QrCode, BarChart, List, FileText, Grid,
   PieChart, LineChart, Heading1, Heading2, AlignLeft, ListOrdered, Grid3X3
 } from 'lucide-react';
-import { ElementType, ElementStyle } from '../types';
+import { ElementType, ElementStyle, TableColumn } from '../types';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,9 +19,10 @@ interface DraggablePresetProps {
   icon: React.ElementType;
   initialStyle?: Partial<ElementStyle>;
   initialContent?: string;
+  initialColumns?: TableColumn[];
 }
 
-const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent }: DraggablePresetProps) => {
+const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent, initialColumns }: DraggablePresetProps) => {
   const handleDragStart = (e: any) => {
     e.dataTransfer.setData('application/react-dnd-type', type);
     e.dataTransfer.setData('application/react-dnd-label', label);
@@ -30,7 +30,8 @@ const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent }
     // Serialize specific style presets to pass to the canvas
     const payload = {
         initialStyle,
-        initialContent
+        initialContent,
+        initialColumns
     };
     e.dataTransfer.setData('application/react-dnd-payload', JSON.stringify(payload));
     
@@ -58,6 +59,13 @@ const SectionHeader = ({ title, icon: Icon }: { title: string; icon: any }) => (
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
+  
+  const defaultColumns: TableColumn[] = [
+    { id: 'c1', header: 'Item Name', accessorKey: 'item', align: 'left' },
+    { id: 'c2', header: 'Quantity', accessorKey: 'qty', align: 'right', width: 80 },
+    { id: 'c3', header: 'Unit Price', accessorKey: 'price', align: 'right', width: 100 }
+  ];
+
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
@@ -141,18 +149,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
                 label="Simple Table" 
                 icon={Table} 
                 initialStyle={{ tableStriped: false, tableShowGrid: false }}
+                initialColumns={defaultColumns}
             />
             <DraggableItem 
                 type="table" 
                 label="Striped Table" 
                 icon={List} 
                 initialStyle={{ tableStriped: true, tableShowGrid: false, tableStripeColor: '#f8fafc', tableRowBg: '#ffffff' }}
+                initialColumns={defaultColumns}
             />
             <DraggableItem 
                 type="table" 
                 label="Grid Table" 
                 icon={Grid3X3} 
                 initialStyle={{ tableStriped: false, tableShowGrid: true, borderColor: '#e4e4e7' }}
+                initialColumns={defaultColumns}
             />
 
             <SectionHeader title="Dynamic Fields" icon={Braces} />

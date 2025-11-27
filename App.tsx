@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';

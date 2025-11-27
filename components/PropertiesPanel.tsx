@@ -1,9 +1,8 @@
 
-
 import React from 'react';
-import { ReportElement } from '../types';
+import { ReportElement, ElementStyle, TableColumn } from '../types';
 import { motion } from 'framer-motion';
-import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List, Plus, Trash2, Palette, ChevronDown } from 'lucide-react';
 
 interface PropertiesPanelProps {
   element: ReportElement | null;
@@ -12,6 +11,39 @@ interface PropertiesPanelProps {
   onUpdateMetadata: (field: string, value: string) => void;
   onExport: (type: 'JSON' | 'PDF' | 'HTML') => void;
 }
+
+// Helper to generate UUIDs locally
+const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+};
+
+const STYLE_PRESETS: Record<string, { label: string, style: Partial<ElementStyle> }[]> = {
+  text: [
+    { label: 'Heading 1', style: { fontSize: 32, fontWeight: 'bold', color: '#f4f4f5' } },
+    { label: 'Heading 2', style: { fontSize: 24, fontWeight: 'bold', color: '#a1a1aa' } },
+    { label: 'Body Text', style: { fontSize: 14, fontWeight: 'normal', color: '#e4e4e7' } },
+    { label: 'Caption', style: { fontSize: 12, fontWeight: 'normal', color: '#71717a' } },
+    { label: 'Accent Label', style: { fontSize: 14, fontWeight: 'bold', color: '#6366f1' } },
+    { label: 'Error Message', style: { fontSize: 14, fontWeight: 'bold', color: '#ef4444' } },
+    { label: 'Success Message', style: { fontSize: 14, fontWeight: 'bold', color: '#22c55e' } },
+  ],
+  table: [
+    { label: 'Clean Light', style: { tableStriped: false, tableHeaderBg: '#f4f4f5', tableHeaderColor: '#18181b', tableRowBg: '#ffffff', tableShowGrid: true, borderColor: '#e4e4e7', color: '#18181b' } },
+    { label: 'Striped Blue', style: { tableStriped: true, tableStripeColor: '#eff6ff', tableHeaderBg: '#3b82f6', tableHeaderColor: '#ffffff', tableRowBg: '#ffffff', tableShowGrid: false, color: '#18181b' } },
+    { label: 'Dark Modern', style: { tableStriped: true, tableStripeColor: '#27272a', tableHeaderBg: '#18181b', tableHeaderColor: '#e4e4e7', tableRowBg: '#09090b', borderColor: '#3f3f46', tableShowGrid: true, color: '#e4e4e7' } },
+    { label: 'Minimal', style: { tableStriped: false, tableShowGrid: false, tableHeaderBg: 'transparent', tableHeaderColor: '#a1a1aa', tableRowBg: 'transparent', borderColor: 'transparent', color: '#e4e4e7' } },
+  ],
+  rectangle: [
+    { label: 'Card Surface', style: { backgroundColor: '#18181b', borderColor: '#27272a', borderWidth: 1, borderRadius: 8 } },
+    { label: 'Outlined Box', style: { backgroundColor: 'transparent', borderColor: '#52525b', borderWidth: 2, borderRadius: 4 } },
+    { label: 'Primary Solid', style: { backgroundColor: '#6366f1', borderColor: 'transparent', borderWidth: 0, borderRadius: 6 } },
+    { label: 'Subtle Fill', style: { backgroundColor: '#27272a', borderColor: 'transparent', borderWidth: 0, borderRadius: 4 } },
+    { label: 'Dashed Border', style: { backgroundColor: 'transparent', borderColor: '#71717a', borderWidth: 2, borderRadius: 4 } },
+  ]
+};
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   element,
@@ -92,6 +124,39 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       });
     }
   };
+
+  const handleApplyPreset = (presetStyle: Partial<ElementStyle>) => {
+    onUpdate({
+        ...element,
+        style: {
+            ...element.style,
+            ...presetStyle
+        }
+    });
+  };
+
+  const handleColumnUpdate = (colId: string, field: keyof TableColumn, value: any) => {
+    if (!element.columns) return;
+    const newColumns = element.columns.map(col => 
+      col.id === colId ? { ...col, [field]: value } : col
+    );
+    onUpdate({ ...element, columns: newColumns });
+  };
+
+  const addColumn = () => {
+    const newCol: TableColumn = {
+        id: generateUUID(),
+        header: 'New Column',
+        accessorKey: 'key',
+        width: 100,
+        align: 'left'
+    };
+    onUpdate({ ...element, columns: [...(element.columns || []), newCol] });
+  };
+
+  const removeColumn = (id: string) => {
+    onUpdate({ ...element, columns: element.columns?.filter(col => col.id !== id) });
+  };
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,6 +171,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
+  const elementPresets = STYLE_PRESETS[element.type];
+
   return (
     <aside className="w-80 bg-surface border-l border-border flex flex-col h-full overflow-hidden z-20 shadow-xl">
       <div className="p-5 border-b border-border bg-surface shrink-0">
@@ -119,6 +186,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-8 custom-scrollbar">
+        
+        {/* Style Presets Dropdown */}
+        {elementPresets && (
+            <section className="space-y-4">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                    <Palette size={12} />
+                    Quick Styles
+                </h3>
+                <div className="relative">
+                    <select
+                        onChange={(e) => {
+                             const preset = elementPresets.find(p => p.label === e.target.value);
+                             if (preset) handleApplyPreset(preset.style);
+                             e.target.value = ""; 
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded px-3 py-2 appearance-none focus:border-primary focus:outline-none cursor-pointer"
+                        defaultValue=""
+                    >
+                        <option value="" disabled>Select a preset...</option>
+                        {elementPresets.map(p => <option key={p.label} value={p.label}>{p.label}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-2.5 text-zinc-500 pointer-events-none" size={14} />
+                </div>
+                <hr className="border-zinc-800" />
+            </section>
+        )}
+
         {/* Position */}
         <section className="space-y-4">
              <div className="grid grid-cols-2 gap-3">
@@ -280,10 +374,64 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         {/* Table Specific Design Section */}
         {element.type === 'table' && (
             <>
+                {/* Column Manager */}
+                <section className="space-y-4">
+                     <div className="flex justify-between items-center">
+                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                            <Grid3X3 size={12} /> Columns
+                         </h3>
+                         <button 
+                            onClick={addColumn}
+                            className="p-1 bg-primary hover:bg-primaryHover text-white rounded transition-colors"
+                         >
+                             <Plus size={14} />
+                         </button>
+                     </div>
+                     
+                     <div className="space-y-2">
+                        {(element.columns || []).map((col) => (
+                            <div key={col.id} className="bg-zinc-900 border border-zinc-700 rounded p-2 space-y-2">
+                                <div className="flex gap-2">
+                                     <div className="flex-1 space-y-1">
+                                         <label className="text-[10px] text-zinc-500">Header</label>
+                                         <input 
+                                            value={col.header} 
+                                            onChange={(e) => handleColumnUpdate(col.id, 'header', e.target.value)}
+                                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:border-primary focus:outline-none"
+                                         />
+                                     </div>
+                                     <button onClick={() => removeColumn(col.id)} className="text-zinc-600 hover:text-red-500 mt-4">
+                                         <Trash2 size={14} />
+                                     </button>
+                                </div>
+                                <div className="flex gap-2">
+                                     <div className="flex-1 space-y-1">
+                                         <label className="text-[10px] text-zinc-500">Key</label>
+                                         <input 
+                                            value={col.accessorKey} 
+                                            onChange={(e) => handleColumnUpdate(col.id, 'accessorKey', e.target.value)}
+                                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:border-primary focus:outline-none"
+                                         />
+                                     </div>
+                                     <div className="w-16 space-y-1">
+                                         <label className="text-[10px] text-zinc-500">Width</label>
+                                         <input 
+                                            type="number"
+                                            value={col.width || ''}
+                                            placeholder="Auto"
+                                            onChange={(e) => handleColumnUpdate(col.id, 'width', parseInt(e.target.value))}
+                                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:border-primary focus:outline-none"
+                                         />
+                                     </div>
+                                </div>
+                            </div>
+                        ))}
+                     </div>
+                </section>
+
                 <section className="space-y-4">
                     <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                        <Grid3X3 size={12} />
-                        Data Table Design
+                        <PaintBucket size={12} /> Table Styling
                     </h3>
                     
                     <div className="space-y-3">
