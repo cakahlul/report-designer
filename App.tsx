@@ -1,19 +1,36 @@
 
-import React, { useState, useRef } from 'react';
-import { Menu, FileJson, CheckCircle, Upload } from 'lucide-react';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { ReportElement, TemplateMetadata } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { GoogleGenAI } from "@google/genai";
 // @ts-ignore
 import html2canvas from 'html2canvas';
 // @ts-ignore
 import { jsPDF } from 'jspdf';
 
+// Helper to generate UUIDs locally
+const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+};
+
 const App: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  
+  // State for Elements
   const [elements, setElements] = useState<ReportElement[]>([]);
+  
+  // State for History
+  const [history, setHistory] = useState<ReportElement[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<TemplateMetadata>({
     name: 'Untitled Report',
@@ -21,30 +38,164 @@ const App: React.FC = () => {
   });
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [exportMessage, setExportMessage] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedElement = elements.find((el) => el.id === selectedId) || null;
+  
+  // Safe API Key retrieval
+  let API_KEY = '';
+  try {
+      if (typeof process !== 'undefined' && process.env) {
+          API_KEY = process.env.API_KEY || '';
+      }
+  } catch (e) { console.warn("Env access failed", e); }
+
+  // --- History Management ---
+
+  const addToHistory = useCallback((newElements: ReportElement[]) => {
+      setHistory(prev => {
+          const newHistory = prev.slice(0, historyIndex + 1);
+          newHistory.push(newElements);
+          return newHistory;
+      });
+      setHistoryIndex(prev => prev + 1);
+  }, [historyIndex]);
+
+  const undo = useCallback(() => {
+      if (historyIndex > 0) {
+          const newIndex = historyIndex - 1;
+          setHistoryIndex(newIndex);
+          setElements(history[newIndex]);
+      }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+      if (historyIndex < history.length - 1) {
+          const newIndex = historyIndex + 1;
+          setHistoryIndex(newIndex);
+          setElements(history[newIndex]);
+      }
+  }, [history, historyIndex]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+              if (e.shiftKey) {
+                  redo();
+              } else {
+                  undo();
+              }
+              e.preventDefault();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+              redo();
+              e.preventDefault();
+          }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
 
   const handleUpdateElement = (updatedElement: ReportElement) => {
-    setElements((prev) =>
-      prev.map((el) => (el.id === updatedElement.id ? updatedElement : el))
-    );
+    const newElements = elements.map((el) => (el.id === updatedElement.id ? updatedElement : el));
+    setElements(newElements);
+    addToHistory(newElements);
   };
 
   const handleUpdateMetadata = (field: string, value: string) => {
     setMetadata(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleExport = async (type: 'JSON' | 'PDF' | 'HTML') => {
-    // Deselect element to remove UI controls (border boxes, delete buttons) from capture
-    setSelectedId(null);
+  const handleAiLayoutFix = async () => {
+      if (!API_KEY || elements.length === 0) return;
+      setIsGenerating(true);
 
-    // Short delay to allow UI to update (remove selection rings)
+      try {
+          const ai = new GoogleGenAI({ apiKey: API_KEY });
+          // Simplified payload to save tokens
+          const simpleElements = elements.map(el => ({
+              id: el.id,
+              type: el.type,
+              x: el.x,
+              y: el.y,
+              width: el.style.width || 'auto',
+              height: el.style.height || 'auto'
+          }));
+
+          const prompt = `
+            You are a layout expert. I have a list of UI elements on an A4 canvas (794x1123).
+            The current positions are messy. Please reorganize them into a professional, aligned layout.
+            - Header elements should be at the top.
+            - Footers at the bottom.
+            - Align text and tables to a consistent grid.
+            - Ensure no overlapping.
+            
+            Current Elements JSON: ${JSON.stringify(simpleElements)}
+            
+            Return ONLY a JSON array of objects with "id", "x", and "y" properties. No markdown.
+          `;
+
+          const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+          });
+
+          const rawText = response.text;
+          const cleanJson = rawText?.replace(/```json|```/g, '').trim();
+          
+          if (cleanJson) {
+              const fixedPositions = JSON.parse(cleanJson);
+              
+              const newElements = elements.map(el => {
+                  const fix = fixedPositions.find((f: any) => f.id === el.id);
+                  if (fix) {
+                      return { ...el, x: fix.x, y: fix.y };
+                  }
+                  return el;
+              });
+
+              setElements(newElements);
+              addToHistory(newElements); // Save to history
+
+              setExportMessage('Layout Fixed by AI');
+              setShowExportSuccess(true);
+              setTimeout(() => setShowExportSuccess(false), 3000);
+          }
+
+      } catch (error) {
+          console.error("AI Layout Fix Failed", error);
+          alert("Failed to fix layout. Please check console.");
+      } finally {
+          setIsGenerating(false);
+      }
+  };
+
+  const handleExport = async (type: 'JSON' | 'PDF' | 'HTML') => {
+    setSelectedId(null);
     await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Dynamic imports to prevent load crashes
+    let html2canvas, jsPDF;
+    try {
+        const h2cModule = await import('html2canvas');
+        // @ts-ignore
+        html2canvas = h2cModule.default || h2cModule;
+        
+        const jspdfModule = await import('jspdf');
+        // @ts-ignore
+        jsPDF = jspdfModule.jsPDF || jspdfModule.default;
+    } catch (e) {
+        console.error("Failed to load export libraries", e);
+        return;
+    }
 
     if (type === 'JSON') {
         const exportData = {
-        templateId: crypto.randomUUID(),
+        templateId: generateUUID(),
         metadata: {
             ...metadata,
             generatedAt: new Date().toISOString(),
@@ -56,7 +207,8 @@ const App: React.FC = () => {
             properties: {
                 content: el.content,
                 key: el.key,
-                style: el.style
+                style: el.style,
+                columns: el.columns
             }
         }))
         };
@@ -70,7 +222,7 @@ const App: React.FC = () => {
 
         try {
             const canvas = await html2canvas(canvasElement, {
-                scale: 2, // Higher quality
+                scale: 2, 
                 useCORS: true,
                 backgroundColor: '#ffffff'
             });
@@ -79,7 +231,7 @@ const App: React.FC = () => {
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'px',
-                format: [794, 1123] // A4 in pixels roughly
+                format: [794, 1123] 
             });
 
             pdf.addImage(imgData, 'PNG', 0, 0, 794, 1123);
@@ -96,7 +248,6 @@ const App: React.FC = () => {
         const canvasElement = document.querySelector('#report-canvas') as HTMLElement;
         if (!canvasElement) return;
         
-        // Simple HTML export - in a real app you might want to inline styles more aggressively
         const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -148,7 +299,6 @@ const App: React.FC = () => {
       try {
         const json = JSON.parse(e.target?.result as string);
         
-        // Basic validation and state update
         if (json.metadata) {
           setMetadata({
             name: json.metadata.name || 'Imported Template',
@@ -158,7 +308,6 @@ const App: React.FC = () => {
         }
 
         if (Array.isArray(json.elements)) {
-          // Map external JSON format back to internal state
           const importedElements: ReportElement[] = json.elements.map((el: any) => ({
             id: el.id,
             type: el.type,
@@ -167,14 +316,15 @@ const App: React.FC = () => {
             label: el.type.charAt(0).toUpperCase() + el.type.slice(1) + (el.type === 'placeholder' ? ' Variable' : ' Block'),
             content: el.properties?.content,
             key: el.properties?.key,
-            style: el.properties?.style || {}
+            style: el.properties?.style || {},
+            columns: el.properties?.columns
           }));
           
           setElements(importedElements);
+          addToHistory(importedElements);
           setSelectedId(null);
         }
         
-        // Clear input value to allow re-importing same file if needed
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -207,6 +357,40 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3">
+             {/* History Controls */}
+            <div className="flex items-center bg-zinc-800 rounded-md border border-zinc-700 mr-2">
+                <button 
+                    onClick={undo}
+                    disabled={historyIndex === 0}
+                    className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                    title="Undo (Ctrl+Z)"
+                >
+                    <Undo2 size={16} />
+                </button>
+                <div className="w-[1px] h-4 bg-zinc-700"></div>
+                <button 
+                    onClick={redo}
+                    disabled={historyIndex === history.length - 1}
+                    className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                    title="Redo (Ctrl+Y)"
+                >
+                    <Redo2 size={16} />
+                </button>
+            </div>
+
+            {/* AI Auto-Align Button */}
+            <button 
+                onClick={handleAiLayoutFix}
+                disabled={isGenerating || elements.length === 0}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Intelligently fix layout issues using Gemini"
+            >
+                {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                <span className="hidden sm:inline">Magic Layout Fix</span>
+            </button>
+
+            <div className="h-4 w-[1px] bg-border mx-1"></div>
+
             <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -238,6 +422,7 @@ const App: React.FC = () => {
         <Canvas
           elements={elements}
           setElements={setElements}
+          addToHistory={addToHistory}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
         />

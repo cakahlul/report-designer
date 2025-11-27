@@ -11,6 +11,7 @@ interface CanvasElementProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
+  onDragEnd: () => void;
 }
 
 export const CanvasElement: React.FC<CanvasElementProps> = ({
@@ -19,6 +20,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   onSelect,
   onDelete,
   onUpdatePosition,
+  onDragEnd,
 }) => {
   const elementRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -30,9 +32,11 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
     
     isDragging.current = true;
     dragStart.current = { x: e.clientX - element.x, y: e.clientY - element.y };
+    let hasMoved = false;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (isDragging.current) {
+        hasMoved = true;
         const newX = moveEvent.clientX - dragStart.current.x;
         const newY = moveEvent.clientY - dragStart.current.y;
         onUpdatePosition(element.id, newX, newY);
@@ -40,9 +44,14 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
     };
 
     const handleMouseUp = () => {
+      const wasDragging = isDragging.current;
       isDragging.current = false;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      
+      if (wasDragging && hasMoved) {
+        onDragEnd();
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);

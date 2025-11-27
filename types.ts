@@ -46,6 +46,19 @@ export interface ElementStyle {
   listStyle?: 'disc' | 'decimal';
 }
 
+export interface TableColumn {
+  name: string;
+  key: string;
+  width?: number;
+}
+
+export interface SnapGuide {
+  type: 'vertical' | 'horizontal';
+  position: number;
+  start: number;
+  end: number;
+}
+
 export interface ReportElement {
   id: string;
   type: ElementType;
@@ -56,6 +69,7 @@ export interface ReportElement {
   key?: string; // For placeholders (e.g., employee_name)
   src?: string; // For images
   style: ElementStyle;
+  columns?: TableColumn[];
 }
 
 export interface TemplateMetadata {
