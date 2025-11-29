@@ -6,7 +6,7 @@ import {
   Minus, Square, Barcode, QrCode, BarChart, List, FileText, Grid,
   PieChart, LineChart, Heading1, Heading2, AlignLeft, ListOrdered, Grid3X3
 } from 'lucide-react';
-import { ElementType, ElementStyle, TableColumn } from '../types';
+import { ElementType, ElementStyle, TableColumn, ChartSeries } from '../types';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,9 +20,11 @@ interface DraggablePresetProps {
   initialStyle?: Partial<ElementStyle>;
   initialContent?: string;
   initialColumns?: TableColumn[];
+  initialSeries?: ChartSeries[];
+  initialKey?: string;
 }
 
-const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent, initialColumns }: DraggablePresetProps) => {
+const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent, initialColumns, initialSeries, initialKey }: DraggablePresetProps) => {
   const handleDragStart = (e: any) => {
     e.dataTransfer.setData('application/react-dnd-type', type);
     e.dataTransfer.setData('application/react-dnd-label', label);
@@ -31,15 +33,19 @@ const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent, 
     const payload = {
         initialStyle,
         initialContent,
-        initialColumns
+        initialColumns,
+        initialSeries,
+        initialKey
     };
     e.dataTransfer.setData('application/react-dnd-payload', JSON.stringify(payload));
     
     e.dataTransfer.effectAllowed = 'copy';
   };
 
+  const MotionDiv = motion.div as any;
+
   return (
-    <motion.div
+    <MotionDiv
       draggable
       onDragStart={handleDragStart}
       whileHover={{ scale: 1.02, backgroundColor: 'rgba(99, 102, 241, 0.1)' }}
@@ -48,7 +54,7 @@ const DraggableItem = ({ type, label, icon: Icon, initialStyle, initialContent, 
     >
       <Icon size={16} className="text-zinc-400 group-hover:text-primary transition-colors" />
       <span className="text-xs font-medium text-zinc-300 select-none group-hover:text-white">{label}</span>
-    </motion.div>
+    </MotionDiv>
   );
 };
 
@@ -66,10 +72,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
     { id: 'c3', header: 'Unit Price', accessorKey: 'price', align: 'right', width: 100 }
   ];
 
+  const defaultChartSeries: ChartSeries[] = [
+    { id: 's1', label: 'Sales', dataKey: 'sales', color: '#6366f1' }
+  ];
+
+  const MotionAside = motion.aside as any;
+
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
-        <motion.aside
+        <MotionAside
           initial={{ x: -250, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: -250, opacity: 0 }}
@@ -125,22 +137,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
                 type="chart" 
                 label="Bar Chart" 
                 icon={BarChart} 
-                initialStyle={{ chartType: 'bar', width: 300, height: 200 }} 
-                initialContent="Quarterly Sales"
+                initialStyle={{ chartType: 'bar', width: 400, height: 300, chartCategoryKey: 'label', chartShowLegend: true, chartShowGrid: true }} 
+                initialContent="Sales Overview"
+                initialSeries={defaultChartSeries}
             />
             <DraggableItem 
                 type="chart" 
                 label="Line Chart" 
                 icon={LineChart} 
-                initialStyle={{ chartType: 'line', width: 300, height: 200 }} 
+                initialStyle={{ chartType: 'line', width: 400, height: 300, chartCategoryKey: 'label', chartShowLegend: true, chartShowGrid: true }} 
                 initialContent="Growth Trend"
+                initialSeries={defaultChartSeries}
             />
             <DraggableItem 
                 type="chart" 
                 label="Pie Chart" 
                 icon={PieChart} 
-                initialStyle={{ chartType: 'pie', width: 250, height: 250 }} 
+                initialStyle={{ chartType: 'pie', width: 300, height: 300, chartCategoryKey: 'label', chartShowLegend: true }} 
                 initialContent="Distribution"
+                initialSeries={[{ id: 's1', label: 'Value', dataKey: 'value', color: '#6366f1' }]}
             />
             
             <SectionHeader title="Tables & Grids" icon={Table} />
@@ -188,7 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
               Drag components to design
             </div>
           </div>
-        </motion.aside>
+        </MotionAside>
       )}
     </AnimatePresence>
   );

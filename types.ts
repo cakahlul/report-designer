@@ -13,6 +13,13 @@ export type ElementType =
   | 'chart' 
   | 'list';
 
+export interface ChartSeries {
+  id: string;
+  dataKey: string;
+  label: string;
+  color: string;
+}
+
 export interface ElementStyle {
   fontFamily?: string;
   fontSize?: number;
@@ -41,6 +48,12 @@ export interface ElementStyle {
 
   // Chart Specifics
   chartType?: 'bar' | 'line' | 'pie';
+  chartCategoryKey?: string; // Key for X-axis or Segment Labels
+  chartShowLegend?: boolean;
+  chartShowGrid?: boolean;
+  chartShowDataLabels?: boolean;
+  chartAxisColor?: string;
+  chartGridColor?: string;
 
   // List Specifics
   listStyle?: 'disc' | 'decimal';
@@ -69,10 +82,11 @@ export interface ReportElement {
   y: number;
   label: string;
   content?: string; // For static text, barcode value
-  key?: string; // For placeholders (e.g., employee_name)
+  key?: string; // For placeholders (e.g., employee_name) or Data Source Array
   src?: string; // For images
   style: ElementStyle;
-  columns?: TableColumn[];
+  columns?: TableColumn[]; // For Tables
+  series?: ChartSeries[]; // For Charts
 }
 
 export interface TemplateMetadata {

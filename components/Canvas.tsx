@@ -9,6 +9,8 @@ interface CanvasProps {
   addToHistory: (elements: ReportElement[]) => void;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
+  previewMode?: boolean;
+  dataContext?: Record<string, any>;
 }
 
 // A4 Dimensions in Pixels (approx 96 DPI)
@@ -24,16 +26,26 @@ const generateUUID = () => {
     });
 };
 
-export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHistory, selectedId, setSelectedId }) => {
+export const Canvas: React.FC<CanvasProps> = ({ 
+  elements, 
+  setElements, 
+  addToHistory, 
+  selectedId, 
+  setSelectedId, 
+  previewMode = false,
+  dataContext = {}
+}) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (previewMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    if (previewMode) return;
     e.preventDefault();
     const type = e.dataTransfer.getData('application/react-dnd-type') as ElementType;
     const label = e.dataTransfer.getData('application/react-dnd-label');
@@ -231,17 +243,19 @@ export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHist
           height: A4_HEIGHT,
           minWidth: A4_WIDTH,
           minHeight: A4_HEIGHT,
+          pointerEvents: previewMode ? 'none' : 'auto', // Disable dropping in preview
         }}
         onClick={(e) => e.stopPropagation()} 
       >
         <div className="absolute inset-0 pointer-events-none" 
              style={{ 
-               backgroundImage: 'linear-gradient(to right, #f4f4f5 1px, transparent 1px), linear-gradient(to bottom, #f4f4f5 1px, transparent 1px)', 
+               backgroundImage: previewMode ? 'none' : 'linear-gradient(to right, #f4f4f5 1px, transparent 1px), linear-gradient(to bottom, #f4f4f5 1px, transparent 1px)', 
                backgroundSize: '40px 40px' 
              }} 
         />
 
         {/* --- Layout Assistant (Snap Guides) --- */}
+        {!previewMode && (
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
             {snapGuides.map((guide, i) => (
                 <line 
@@ -256,6 +270,7 @@ export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHist
                 />
             ))}
         </svg>
+        )}
 
         {elements.map((el) => (
           <CanvasElement
@@ -267,10 +282,12 @@ export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHist
             onUpdatePosition={handleUpdatePosition}
             onResize={handleResize}
             onDragEnd={handleDragEnd}
+            previewMode={previewMode}
+            dataContext={dataContext}
           />
         ))}
 
-        {elements.length === 0 && (
+        {elements.length === 0 && !previewMode && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-zinc-300 text-center">
               <p className="text-xl font-medium mb-2">Empty Template</p>

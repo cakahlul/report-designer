@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { ReportElement, ElementStyle, TableColumn } from '../types';
+import { ReportElement, ElementStyle, TableColumn, ChartSeries } from '../types';
 import { motion } from 'framer-motion';
-import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List, Plus, Trash2, Palette, ChevronDown } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List, Plus, Trash2, Palette, ChevronDown, Database, Layers } from 'lucide-react';
 
 interface PropertiesPanelProps {
   element: ReportElement | null;
@@ -135,6 +135,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
   };
 
+  // --- Table Column Handlers ---
   const handleColumnUpdate = (colId: string, field: keyof TableColumn, value: any) => {
     if (!element.columns) return;
     const newColumns = element.columns.map(col => 
@@ -156,6 +157,29 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const removeColumn = (id: string) => {
     onUpdate({ ...element, columns: element.columns?.filter(col => col.id !== id) });
+  };
+
+  // --- Chart Series Handlers ---
+  const handleSeriesUpdate = (seriesId: string, field: keyof ChartSeries, value: any) => {
+      if (!element.series) return;
+      const newSeries = element.series.map(s => 
+          s.id === seriesId ? { ...s, [field]: value } : s
+      );
+      onUpdate({ ...element, series: newSeries });
+  };
+
+  const addSeries = () => {
+      const newSeries: ChartSeries = {
+          id: generateUUID(),
+          label: 'New Series',
+          dataKey: 'value',
+          color: '#818cf8'
+      };
+      onUpdate({ ...element, series: [...(element.series || []), newSeries] });
+  };
+
+  const removeSeries = (id: string) => {
+      onUpdate({ ...element, series: element.series?.filter(s => s.id !== id) });
   };
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,7 +311,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </div>
             )}
 
-            {/* Chart */}
+            {/* CHART CONFIGURATION */}
              {element.type === 'chart' && (
                 <div className="space-y-4">
                      <div className="space-y-1">
@@ -312,8 +336,115 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                             className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-primary"
                         />
                     </div>
+                    
+                    {/* Visual Options Toggles */}
+                    <div className="grid grid-cols-2 gap-2">
+                         <div className="flex items-center justify-between bg-zinc-900 p-2 rounded border border-zinc-700">
+                             <span className="text-[10px] text-zinc-400">Show Legend</span>
+                             <input type="checkbox" checked={element.style.chartShowLegend !== false} onChange={(e) => handleChange('style', e.target.checked, 'chartShowLegend')} className="accent-primary" />
+                         </div>
+                         <div className="flex items-center justify-between bg-zinc-900 p-2 rounded border border-zinc-700">
+                             <span className="text-[10px] text-zinc-400">Show Grid</span>
+                             <input type="checkbox" checked={element.style.chartShowGrid !== false} onChange={(e) => handleChange('style', e.target.checked, 'chartShowGrid')} className="accent-primary" />
+                         </div>
+                    </div>
+
+                    <div className="space-y-3 p-3 bg-zinc-900/50 rounded border border-zinc-800">
+                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
+                            <Database size={10} /> Data Binding
+                        </h4>
+                        
+                        {/* Data Source */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">Source Array</label>
+                            <div className="relative group">
+                                <span className="absolute left-3 top-2 text-primary font-mono text-xs font-bold">{`{{`}</span>
+                                <input
+                                    type="text"
+                                    value={element.key || ''}
+                                    onChange={(e) => handleChange('key', e.target.value.replace(/\s/g, '_'))}
+                                    placeholder="e.g. sales_data"
+                                    className="w-full bg-zinc-900 border border-zinc-700 rounded pl-8 pr-8 py-2 text-xs text-primary font-mono font-medium focus:outline-none focus:border-primary group-hover:border-zinc-600 transition-colors"
+                                />
+                                <span className="absolute right-3 top-2 text-primary font-mono text-xs font-bold">{`}}`}</span>
+                            </div>
+                        </div>
+
+                         {/* X-Axis Key */}
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">X-Axis Key (Labels)</label>
+                            <input
+                                type="text"
+                                value={element.style.chartCategoryKey || ''}
+                                onChange={(e) => handleChange('style', e.target.value, 'chartCategoryKey')}
+                                placeholder="e.g. month"
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-300 font-mono focus:outline-none focus:border-primary placeholder:text-zinc-600"
+                            />
+                        </div>
+                    </div>
+
+                    {/* SERIES MANAGER */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                                <Layers size={12} /> Data Series
+                            </h3>
+                            <button onClick={addSeries} className="p-1 bg-primary hover:bg-primaryHover text-white rounded transition-colors" title="Add Series">
+                                <Plus size={14} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            {(element.series || []).map((series) => (
+                                <div key={series.id} className="bg-zinc-900 border border-zinc-700 rounded p-2 space-y-2 relative group">
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1 space-y-1">
+                                             <label className="text-[9px] text-zinc-500 uppercase">Series Label</label>
+                                             <input 
+                                                value={series.label} 
+                                                onChange={(e) => handleSeriesUpdate(series.id, 'label', e.target.value)}
+                                                className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:border-primary focus:outline-none"
+                                             />
+                                        </div>
+                                        <button onClick={() => removeSeries(series.id)} className="text-zinc-600 hover:text-red-500 ml-2 mt-4">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 space-y-1">
+                                            <label className="text-[9px] text-zinc-500 uppercase">Data Key</label>
+                                            <input 
+                                                value={series.dataKey} 
+                                                onChange={(e) => handleSeriesUpdate(series.id, 'dataKey', e.target.value)}
+                                                placeholder="e.g. revenue"
+                                                className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:border-primary focus:outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] text-zinc-500 uppercase">Color</label>
+                                            <div className="flex items-center gap-2 h-[26px] bg-zinc-800 border border-zinc-700 rounded px-1">
+                                                <input
+                                                    type="color"
+                                                    value={series.color || '#6366f1'}
+                                                    onChange={(e) => handleSeriesUpdate(series.id, 'color', e.target.value)}
+                                                    className="w-4 h-4 rounded cursor-pointer bg-transparent border-none p-0"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {(element.series || []).length === 0 && (
+                                <div className="text-center py-4 text-xs text-zinc-500 italic border border-dashed border-zinc-800 rounded">
+                                    No data series. Click + to add.
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
+
 
             {/* Image Content */}
             {element.type === 'image' && (
@@ -374,6 +505,28 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         {/* Table Specific Design Section */}
         {element.type === 'table' && (
             <>
+                <section className="space-y-4">
+                     <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                        <Database size={12} /> Data Binding
+                     </h3>
+                     <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-500 uppercase">Source Array</label>
+                        <div className="relative group">
+                            <span className="absolute left-3 top-2 text-primary font-mono text-xs font-bold">{`{{`}</span>
+                            <input
+                                type="text"
+                                value={element.key || ''}
+                                onChange={(e) => handleChange('key', e.target.value.replace(/\s/g, '_'))}
+                                placeholder="e.g. line_items"
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded pl-8 pr-8 py-2 text-xs text-primary font-mono font-medium focus:outline-none focus:border-primary group-hover:border-zinc-600 transition-colors"
+                            />
+                            <span className="absolute right-3 top-2 text-primary font-mono text-xs font-bold">{`}}`}</span>
+                        </div>
+                    </div>
+                </section>
+                
+                <hr className="border-zinc-800" />
+
                 {/* Column Manager */}
                 <section className="space-y-4">
                      <div className="flex justify-between items-center">

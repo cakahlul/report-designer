@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2 } from 'lucide-react';
+import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2, Eye, EyeOff, Database, X } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import { PropertiesPanel } from './components/PropertiesPanel';
@@ -18,6 +18,24 @@ const generateUUID = () => {
       var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
+};
+
+const DEFAULT_TEST_DATA = {
+  "company": "Acme Corp",
+  "report_date": "2023-10-27",
+  "monthly_sales": [
+      { "month": "Jan", "revenue": 12000, "cost": 8000, "profit": 4000 },
+      { "month": "Feb", "revenue": 15000, "cost": 9000, "profit": 6000 },
+      { "month": "Mar", "revenue": 11000, "cost": 8500, "profit": 2500 },
+      { "month": "Apr", "revenue": 18000, "cost": 10000, "profit": 8000 },
+      { "month": "May", "revenue": 22000, "cost": 12000, "profit": 10000 }
+  ],
+  "employees": [
+    { "id": "E001", "name": "Alice Smith", "role": "Senior Developer", "salary": "$120,000" },
+    { "id": "E002", "name": "Bob Jones", "role": "UI Designer", "salary": "$95,000" },
+    { "id": "E003", "name": "Charlie Day", "role": "Project Manager", "salary": "$105,000" },
+    { "id": "E004", "name": "Diana Prince", "role": "DevOps Engineer", "salary": "$115,000" }
+  ]
 };
 
 const App: React.FC = () => {
@@ -38,6 +56,13 @@ const App: React.FC = () => {
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [exportMessage, setExportMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Preview & Data Binding State
+  const [previewMode, setPreviewMode] = useState(false);
+  const [showDataEditor, setShowDataEditor] = useState(false);
+  const [testDataInput, setTestDataInput] = useState(JSON.stringify(DEFAULT_TEST_DATA, null, 2));
+  const [dataContext, setDataContext] = useState<Record<string, any>>(DEFAULT_TEST_DATA);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedElement = elements.find((el) => el.id === selectedId) || null;
@@ -175,6 +200,7 @@ const App: React.FC = () => {
 
   const handleExport = async (type: 'JSON' | 'PDF' | 'HTML') => {
     setSelectedId(null);
+    setPreviewMode(true); // Force preview mode for cleaner export
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Dynamic imports to prevent load crashes
@@ -207,7 +233,8 @@ const App: React.FC = () => {
                 content: el.content,
                 key: el.key,
                 style: el.style,
-                columns: el.columns
+                columns: el.columns,
+                series: el.series
             }
         }))
         };
@@ -282,6 +309,7 @@ const App: React.FC = () => {
         setShowExportSuccess(true);
     }
 
+    setPreviewMode(false); // Revert
     setTimeout(() => setShowExportSuccess(false), 3000);
   };
 
@@ -316,7 +344,8 @@ const App: React.FC = () => {
             content: el.properties?.content,
             key: el.properties?.key,
             style: el.properties?.style || {},
-            columns: el.properties?.columns
+            columns: el.properties?.columns,
+            series: el.properties?.series
           }));
           
           setElements(importedElements);
@@ -335,6 +364,21 @@ const App: React.FC = () => {
     };
     reader.readAsText(file);
   };
+
+  const handleSaveData = () => {
+      try {
+          const parsed = JSON.parse(testDataInput);
+          setDataContext(parsed);
+          setShowDataEditor(false);
+          setExportMessage('Test Data Updated');
+          setShowExportSuccess(true);
+          setTimeout(() => setShowExportSuccess(false), 2000);
+      } catch (e) {
+          alert("Invalid JSON format");
+      }
+  };
+
+  const MotionDiv = motion.div as any;
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden selection:bg-primary/30 text-zinc-100">
@@ -377,6 +421,27 @@ const App: React.FC = () => {
                 </button>
             </div>
 
+            <div className="h-4 w-[1px] bg-border mx-1"></div>
+
+            {/* Data Controls */}
+            <button
+                onClick={() => setShowDataEditor(true)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-surface text-zinc-400 hover:text-white text-xs font-medium transition-all border border-transparent hover:border-zinc-700"
+            >
+                <Database size={14} />
+                <span>Data Source</span>
+            </button>
+
+            <button
+                onClick={() => { setPreviewMode(!previewMode); setSelectedId(null); }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${previewMode ? 'bg-primary/20 border-primary text-primary' : 'hover:bg-surface text-zinc-400 hover:text-white border-transparent hover:border-zinc-700'}`}
+            >
+                {previewMode ? <Eye size={14} /> : <EyeOff size={14} />}
+                <span>{previewMode ? 'Previewing' : 'Preview'}</span>
+            </button>
+
+             <div className="h-4 w-[1px] bg-border mx-1"></div>
+
             {/* AI Auto-Align Button */}
             <button 
                 onClick={handleAiLayoutFix}
@@ -403,14 +468,8 @@ const App: React.FC = () => {
                 className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:text-white text-zinc-400 text-xs font-medium transition-all"
             >
                 <Upload size={14} />
-                <span>Import JSON</span>
+                <span className="hidden lg:inline">Import JSON</span>
             </button>
-
-            <div className="h-4 w-[1px] bg-border mx-1"></div>
-
-            <div className="text-xs text-zinc-500 font-mono hidden sm:block">
-                {elements.length} Elements
-            </div>
         </div>
       </header>
 
@@ -424,6 +483,8 @@ const App: React.FC = () => {
           addToHistory={addToHistory}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
+          previewMode={previewMode}
+          dataContext={dataContext}
         />
         
         <PropertiesPanel
@@ -437,7 +498,7 @@ const App: React.FC = () => {
         {/* Success Toast */}
         <AnimatePresence>
             {showExportSuccess && (
-                <motion.div
+                <MotionDiv
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 20 }}
@@ -445,7 +506,44 @@ const App: React.FC = () => {
                 >
                     <CheckCircle size={20} className="text-green-400" />
                     <span className="font-medium text-sm">{exportMessage}</span>
-                </motion.div>
+                </MotionDiv>
+            )}
+        </AnimatePresence>
+
+        {/* Data Editor Modal */}
+        <AnimatePresence>
+            {showDataEditor && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <MotionDiv 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-surface border border-border rounded-lg shadow-2xl w-[600px] flex flex-col max-h-[80vh]"
+                    >
+                        <div className="flex items-center justify-between p-4 border-b border-border">
+                            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                                <Database size={16} className="text-primary" />
+                                Test Data (JSON)
+                            </h2>
+                            <button onClick={() => setShowDataEditor(false)} className="text-zinc-400 hover:text-white">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 flex-1 flex flex-col">
+                             <p className="text-xs text-zinc-400 mb-2">Define JSON data here. Bind elements using keys (e.g. <code>employees</code> for tables, <code>company</code> for text).</p>
+                             <textarea 
+                                className="w-full flex-1 bg-background border border-border rounded p-3 font-mono text-xs text-zinc-300 focus:outline-none focus:border-primary resize-none"
+                                value={testDataInput}
+                                onChange={(e) => setTestDataInput(e.target.value)}
+                                spellCheck={false}
+                             />
+                        </div>
+                        <div className="p-4 border-t border-border flex justify-end gap-2">
+                             <button onClick={() => setShowDataEditor(false)} className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white">Cancel</button>
+                             <button onClick={handleSaveData} className="px-4 py-2 text-xs font-medium bg-primary hover:bg-primaryHover text-white rounded">Save Data</button>
+                        </div>
+                    </MotionDiv>
+                </div>
             )}
         </AnimatePresence>
       </main>
