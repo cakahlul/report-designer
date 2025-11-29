@@ -182,6 +182,24 @@ export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHist
     );
   };
 
+  const handleResize = (id: string, width: number, height: number, x: number, y: number) => {
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id !== id) return el;
+        return {
+          ...el,
+          x,
+          y,
+          style: {
+            ...el.style,
+            width,
+            height,
+          },
+        };
+      })
+    );
+  };
+
   const handleDragEnd = () => {
       setSnapGuides([]); // Clear guides
       // Save state to history after drag completes
@@ -247,6 +265,7 @@ export const Canvas: React.FC<CanvasProps> = ({ elements, setElements, addToHist
             onSelect={setSelectedId}
             onDelete={handleDelete}
             onUpdatePosition={handleUpdatePosition}
+            onResize={handleResize}
             onDragEnd={handleDragEnd}
           />
         ))}

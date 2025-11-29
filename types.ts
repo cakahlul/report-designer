@@ -14,6 +14,7 @@ export type ElementType =
   | 'list';
 
 export interface ElementStyle {
+  fontFamily?: string;
   fontSize?: number;
   fontWeight?: 'normal' | 'bold';
   textAlign?: 'left' | 'center' | 'right';

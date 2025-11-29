@@ -10,6 +10,7 @@ interface CanvasElementProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
+  onResize: (id: string, width: number, height: number, x: number, y: number) => void;
   onDragEnd?: () => void;
 }
 
@@ -19,6 +20,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   onSelect,
   onDelete,
   onUpdatePosition,
+  onResize,
   onDragEnd,
 }) => {
   const elementRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,73 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleResizeStart = (e: React.MouseEvent, direction: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    const el = elementRef.current;
+    if (!el) return;
+
+    // Capture initial values (use offsetWidth/Height in case style is auto)
+    const startWidth = el.offsetWidth;
+    const startHeight = el.offsetHeight;
+    const startLeft = element.x;
+    const startTop = element.y;
+
+    let hasResized = false;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+      hasResized = true;
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newX = startLeft;
+      let newY = startTop;
+
+      // Calculate new dimensions based on direction
+      if (direction.includes('e')) {
+        newWidth = startWidth + deltaX;
+      } else if (direction.includes('w')) {
+        newWidth = startWidth - deltaX;
+        newX = startLeft + deltaX;
+      }
+
+      if (direction.includes('s')) {
+        newHeight = startHeight + deltaY;
+      } else if (direction.includes('n')) {
+        newHeight = startHeight - deltaY;
+        newY = startTop + deltaY;
+      }
+
+      // Constraints
+      if (newWidth < 20) {
+         if (direction.includes('w')) newX = startLeft + (startWidth - 20);
+         newWidth = 20;
+      }
+      if (newHeight < 20) {
+         if (direction.includes('n')) newY = startTop + (startHeight - 20);
+         newHeight = 20;
+      }
+
+      onResize(element.id, newWidth, newHeight, newX, newY);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      if (hasResized && onDragEnd) onDragEnd();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
   // Construct dynamic styles
   const containerStyle: React.CSSProperties = {
     left: element.x,
@@ -76,6 +145,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const textStyle: React.CSSProperties = {
+    fontFamily: element.style.fontFamily,
     fontSize: element.style.fontSize,
     fontWeight: element.style.fontWeight,
     textAlign: element.style.textAlign || 'left',
@@ -102,7 +172,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         ];
 
         return (
-          <div className="w-full overflow-hidden" style={{ color: element.style.color }}>
+          <div className="w-full overflow-hidden" style={{ color: element.style.color, fontFamily: element.style.fontFamily }}>
             <table className="w-full border-collapse text-sm table-fixed">
                 <colgroup>
                     {columns.map(col => <col key={col.id} style={{ width: col.width ? `${col.width}px` : 'auto' }} />)}
@@ -160,7 +230,11 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
           <div className="inline-flex items-center font-mono text-sm w-full" style={{ justifyContent: element.style.textAlign === 'center' ? 'center' : element.style.textAlign === 'right' ? 'flex-end' : 'flex-start' }}>
             <span 
               className="px-2 py-1 rounded bg-primary/10 border border-primary/30 text-primary whitespace-nowrap"
-              style={{ fontSize: element.style.fontSize, fontWeight: element.style.fontWeight }}
+              style={{ 
+                  fontSize: element.style.fontSize, 
+                  fontWeight: element.style.fontWeight,
+                  fontFamily: element.style.fontFamily 
+              }}
             >
               {`{{ ${element.key || 'variable_name'} }}`}
             </span>
@@ -312,17 +386,32 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
 
         {/* Selected Controls */}
         {isSelected && (
-          <div className="absolute -top-8 right-0 flex items-center gap-1 bg-surface border border-border rounded-md shadow-lg p-1 z-50">
-             <div className="p-1 text-zinc-400 cursor-grab active:cursor-grabbing">
-                <GripVertical size={14} />
-             </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(element.id); }}
-              className="p-1 hover:bg-red-500/10 hover:text-red-500 text-zinc-400 rounded transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          <>
+            <div className="absolute -top-8 right-0 flex items-center gap-1 bg-surface border border-border rounded-md shadow-lg p-1 z-50">
+               <div className="p-1 text-zinc-400 cursor-grab active:cursor-grabbing">
+                  <GripVertical size={14} />
+               </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(element.id); }}
+                className="p-1 hover:bg-red-500/10 hover:text-red-500 text-zinc-400 rounded transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            {/* Resize Handles */}
+            <>
+                <div className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-nwse-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+                <div className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-nesw-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+                <div className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-nesw-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+                <div className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-nwse-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+                
+                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-ns-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'n')} />
+                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-ns-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 's')} />
+                <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-ew-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'w')} />
+                <div className="absolute top-1/2 -translate-y-1/2 -right-1.5 w-2.5 h-2.5 bg-white border border-primary rounded-full cursor-ew-resize z-50 hover:scale-125 transition-transform" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+            </>
+          </>
         )}
       </div>
     </motion.div>

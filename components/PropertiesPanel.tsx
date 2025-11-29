@@ -527,6 +527,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </h3>
                 
                 <div className="space-y-3">
+                    {/* Font Family Selection */}
+                    <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-500 uppercase">Font Family</label>
+                        <select
+                            value={element.style.fontFamily || 'Inter'}
+                            onChange={(e) => handleChange('style', e.target.value, 'fontFamily')}
+                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:border-primary focus:outline-none"
+                        >
+                            <option value="Inter">Inter</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="Open Sans">Open Sans</option>
+                        </select>
+                    </div>
+
                     <div className="flex items-center justify-between gap-4">
                          <div className="space-y-1 flex-1">
                             <label className="text-[10px] text-zinc-500 uppercase">Size</label>
