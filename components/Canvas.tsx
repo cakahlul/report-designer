@@ -11,6 +11,7 @@ interface CanvasProps {
   setSelectedId: (id: string | null) => void;
   previewMode?: boolean;
   dataContext?: Record<string, any>;
+  onClearSelection: () => void;
 }
 
 // A4 Dimensions in Pixels (approx 96 DPI)
@@ -33,7 +34,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedId, 
   setSelectedId, 
   previewMode = false,
-  dataContext = {}
+  dataContext = {},
+  onClearSelection
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
@@ -233,7 +235,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   return (
     <div 
       className="flex-1 bg-zinc-900/50 overflow-auto flex justify-center p-8 relative"
-      onClick={() => setSelectedId(null)}
+      onClick={() => onClearSelection()}
     >
       <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
       
@@ -250,7 +252,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           minHeight: A4_HEIGHT,
           pointerEvents: previewMode ? 'none' : 'auto', // Disable dropping in preview
         }}
-        onClick={(e) => e.stopPropagation()} 
+        onClick={(e) => { e.stopPropagation(); onClearSelection(); }} 
       >
         <div className="absolute inset-0 pointer-events-none" 
              style={{ 

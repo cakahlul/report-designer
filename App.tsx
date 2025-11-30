@@ -40,6 +40,7 @@ const DEFAULT_TEST_DATA = {
 
 const App: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isPropertiesPanelOpen, setPropertiesPanelOpen] = useState(true);
   
   // State for Elements
   const [elements, setElements] = useState<ReportElement[]>([]);
@@ -49,6 +50,10 @@ const App: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(0);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  
+  // Clipboard for Copy/Paste
+  const [clipboard, setClipboard] = useState<ReportElement | null>(null);
+
   const [metadata, setMetadata] = useState<TemplateMetadata>({
     name: 'Untitled Report',
     outputFormat: 'PDF',
@@ -106,26 +111,113 @@ const App: React.FC = () => {
       }
   }, [history, historyIndex]);
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts (Undo, Redo, Copy, Paste, Delete, Move)
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+          // Check if user is typing in an input/textarea
+          const activeTag = document.activeElement?.tagName;
+          const isInputActive = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+          
+          // Undo (Ctrl+Z)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isInputActive) {
               if (e.shiftKey) {
                   redo();
               } else {
                   undo();
               }
               e.preventDefault();
+              return;
           }
-          if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+
+          // Redo (Ctrl+Y)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'y' && !isInputActive) {
               redo();
               e.preventDefault();
+              return;
+          }
+
+          // Stop here if user is typing in a field
+          if (isInputActive) return;
+
+          // Copy (Ctrl+C)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+              if (selectedId) {
+                  const el = elements.find(e => e.id === selectedId);
+                  if (el) {
+                      setClipboard(el);
+                      setExportMessage('Element Copied');
+                      setShowExportSuccess(true);
+                      setTimeout(() => setShowExportSuccess(false), 1500);
+                  }
+              }
+              return;
+          }
+
+          // Paste (Ctrl+V)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+              if (clipboard) {
+                  const newId = generateUUID();
+                  const offset = 20; // Pixel offset for pasted item
+                  const newElement: ReportElement = {
+                      ...clipboard,
+                      id: newId,
+                      x: clipboard.x + offset,
+                      y: clipboard.y + offset,
+                      label: `${clipboard.label} (Copy)`
+                  };
+                  
+                  const newElements = [...elements, newElement];
+                  setElements(newElements);
+                  addToHistory(newElements);
+                  setSelectedId(newId);
+                  
+                  setExportMessage('Element Pasted');
+                  setShowExportSuccess(true);
+                  setTimeout(() => setShowExportSuccess(false), 1500);
+              }
+              return;
+          }
+
+          // Delete (Del / Backspace)
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+              if (selectedId) {
+                  const newElements = elements.filter(el => el.id !== selectedId);
+                  setElements(newElements);
+                  addToHistory(newElements);
+                  setSelectedId(null);
+                  e.preventDefault(); // Prevent browser back nav
+              }
+              return;
+          }
+
+          // Move (Arrow Keys)
+          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+              if (selectedId) {
+                  e.preventDefault();
+                  const step = e.shiftKey ? 10 : 1;
+                  
+                  const updatedElements = elements.map(el => {
+                      if (el.id === selectedId) {
+                          let { x, y } = el;
+                          if (e.key === 'ArrowUp') y -= step;
+                          if (e.key === 'ArrowDown') y += step;
+                          if (e.key === 'ArrowLeft') x -= step;
+                          if (e.key === 'ArrowRight') x += step;
+                          return { ...el, x, y };
+                      }
+                      return el;
+                  });
+                  
+                  setElements(updatedElements);
+                  // Saving to history for movements can be chatty, but ensures consistency
+                  addToHistory(updatedElements);
+              }
           }
       };
 
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [elements, selectedId, clipboard, undo, redo, addToHistory]);
 
 
   const handleUpdateElement = (updatedElement: ReportElement) => {
@@ -509,6 +601,18 @@ const App: React.FC = () => {
       }
   };
 
+  const handleSelectElement = (id: string | null) => {
+    setSelectedId(id);
+    if (id) {
+        setPropertiesPanelOpen(true);
+    }
+  };
+
+  const handleClearSelection = () => {
+      setSelectedId(null);
+      setPropertiesPanelOpen(true);
+  }
+
   const MotionDiv = motion.div as any;
 
   return (
@@ -634,9 +738,10 @@ const App: React.FC = () => {
           setElements={setElements}
           addToHistory={addToHistory}
           selectedId={selectedId}
-          setSelectedId={setSelectedId}
+          setSelectedId={handleSelectElement}
           previewMode={previewMode}
           dataContext={dataContext}
+          onClearSelection={handleClearSelection}
         />
         
         <PropertiesPanel
@@ -645,6 +750,9 @@ const App: React.FC = () => {
           metadata={metadata}
           onUpdateMetadata={handleUpdateMetadata}
           onExport={handleExport}
+          dataContext={dataContext}
+          isOpen={isPropertiesPanelOpen}
+          onClose={() => setPropertiesPanelOpen(false)}
         />
         
         {/* Success Toast */}

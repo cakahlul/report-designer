@@ -204,8 +204,10 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
           data = categories.map((cat, i) => {
               const row: any = { [categoryKey]: cat };
               series.forEach((s, idx) => {
-                  // Generate deterministic pseudo-random data based on index so it doesn't flicker wildly
-                  row[s.dataKey] = Math.floor((Math.sin(i + idx) + 1) * 40) + 20;
+                  // Generate deterministic pseudo-random data based on index and KEY NAME
+                  // This ensures that changing the key name changes the visual chart, giving user feedback
+                  const seed = s.dataKey.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                  row[s.dataKey] = Math.floor((Math.sin(i + seed) + 1) * 40) + 20;
               });
               return row;
           });
@@ -690,6 +692,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       className={`absolute ${previewMode ? '' : 'cursor-move'} group select-none ${isSelected && !previewMode ? 'z-[100]' : ''}`}
       style={containerStyle}
       onMouseDown={handleMouseDown}
+      onClick={(e: React.MouseEvent) => !previewMode && e.stopPropagation()}
       whileHover={{ scale: previewMode ? 1 : 1.005 }}
     >
       <div
