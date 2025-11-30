@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2, Eye, EyeOff, Database, X } from 'lucide-react';
+import { Menu, FileJson, CheckCircle, Upload, Wand2, Loader2, Undo2, Redo2, Eye, EyeOff, Database, X, Sparkles } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import { PropertiesPanel } from './components/PropertiesPanel';
@@ -56,12 +56,16 @@ const App: React.FC = () => {
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [exportMessage, setExportMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingData, setIsGeneratingData] = useState(false);
   
   // Preview & Data Binding State
   const [previewMode, setPreviewMode] = useState(false);
   const [showDataEditor, setShowDataEditor] = useState(false);
   const [testDataInput, setTestDataInput] = useState(JSON.stringify(DEFAULT_TEST_DATA, null, 2));
   const [dataContext, setDataContext] = useState<Record<string, any>>(DEFAULT_TEST_DATA);
+
+  // AI Context Prompt
+  const [aiContextPrompt, setAiContextPrompt] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -195,6 +199,133 @@ const App: React.FC = () => {
           alert("Failed to fix layout. Please check console.");
       } finally {
           setIsGenerating(false);
+      }
+  };
+
+  const handleAiDataGenerate = async () => {
+      if (!API_KEY) {
+          alert("API Key missing");
+          return;
+      }
+      setIsGeneratingData(true);
+
+      try {
+          // 1. Analyze for Data Bindings
+          const singleVars = new Set<string>();
+          const arraySchemas: Record<string, Set<string>> = {};
+
+          elements.forEach(el => {
+              if (el.type === 'placeholder' && el.key) {
+                  singleVars.add(el.key);
+              }
+              
+              if ((el.type === 'table' || el.type === 'chart') && el.key) {
+                  if (!arraySchemas[el.key]) {
+                      arraySchemas[el.key] = new Set();
+                  }
+                  
+                  if (el.type === 'table' && el.columns) {
+                      el.columns.forEach(col => arraySchemas[el.key!].add(col.accessorKey));
+                  }
+                  
+                  if (el.type === 'chart') {
+                      if (el.style.chartCategoryKey) arraySchemas[el.key!].add(el.style.chartCategoryKey);
+                      if (el.series) {
+                          el.series.forEach(s => arraySchemas[el.key!].add(s.dataKey));
+                      }
+                  }
+              }
+          });
+
+          // 2. Analyze for Static Content (that looks like a placeholder or default)
+          // Includes lists now for dynamic generation
+          const staticElements = elements
+            .filter(el => 
+                (['text', 'header', 'footer', 'chart', 'list'].includes(el.type)) && 
+                (el.content !== undefined || el.type === 'list') && // Allow lists explicitly
+                !(el.content || '').includes('{{') // Ignore manual bindings
+            )
+            .map(el => ({
+                id: el.id,
+                type: el.type,
+                currentContent: el.content || (el.type === 'list' ? 'List Item 1\nList Item 2' : 'Default Content')
+            }));
+
+          // Convert sets to arrays for prompt
+          const arraysForPrompt: any = {};
+          Object.keys(arraySchemas).forEach(k => {
+              arraysForPrompt[k] = Array.from(arraySchemas[k]);
+          });
+
+          const prompt = `
+            You are a creative assistant for a report designer tool.
+            Your goal is to populate the template with realistic dummy data AND rewrite the static text/list elements to make the report look professional and contextually consistent.
+            
+            User Context/Theme: "${aiContextPrompt || 'A general business report'}"
+
+            Context:
+            1. Data Bindings needed (Generate "dataContext"):
+            - Single Variables: ${JSON.stringify(Array.from(singleVars))}
+            - Arrays of Objects: ${JSON.stringify(arraysForPrompt)}
+
+            2. Static Elements to Improve (Generate "elementUpdates"):
+            - Identify generic text like "Heading 1", "New Chart", "Footer Band", and replaced with specific, professional text fitting the User Context.
+            - CRITICAL: For 'list' types, you MUST return the content as a single string with items separated by a newline character (\\n). Example: "Quarterly Review\\nProject Status\\nNext Steps"
+            - Elements: ${JSON.stringify(staticElements)}
+
+            Requirements:
+            - Ensure numbers (currency, counts) are realistic.
+            - Use the User Context to decide the company, industry, and terminology.
+            - Return ONLY valid JSON with this schema:
+            {
+              "dataContext": { ... }, 
+              "elementUpdates": [ { "id": "...", "content": "..." } ]
+            }
+          `;
+
+          const ai = new GoogleGenAI({ apiKey: API_KEY });
+          const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+          });
+
+          const rawText = response.text;
+          const cleanJson = rawText?.replace(/```json|```/g, '').trim();
+
+          if (cleanJson) {
+              const result = JSON.parse(cleanJson);
+              
+              // 1. Apply Data Context
+              if (result.dataContext) {
+                setTestDataInput(JSON.stringify(result.dataContext, null, 2));
+                setDataContext(result.dataContext);
+              }
+
+              // 2. Apply Element Content Updates
+              if (Array.isArray(result.elementUpdates) && result.elementUpdates.length > 0) {
+                  const newElements = elements.map(el => {
+                      const update = result.elementUpdates.find((u: any) => u.id === el.id);
+                      if (update) {
+                          return { ...el, content: update.content };
+                      }
+                      return el;
+                  });
+                  setElements(newElements);
+                  addToHistory(newElements);
+              }
+              
+              setExportMessage('Template Filled & Themed');
+              setShowExportSuccess(true);
+              setPreviewMode(true); 
+              setSelectedId(null);
+          }
+
+      } catch (e) {
+          console.error("AI Data Gen Failed", e);
+          alert("Failed to generate data. Please try again.");
+      } finally {
+          setIsGeneratingData(false);
+          setTimeout(() => setShowExportSuccess(false), 2000);
       }
   };
 
@@ -423,13 +554,34 @@ const App: React.FC = () => {
 
             <div className="h-4 w-[1px] bg-border mx-1"></div>
 
+            {/* AI Data Gen Controls */}
+            <div className="flex items-center gap-2 bg-zinc-900/50 p-1 rounded-md border border-zinc-800">
+                <input
+                    type="text"
+                    value={aiContextPrompt}
+                    onChange={(e) => setAiContextPrompt(e.target.value)}
+                    placeholder="Describe content (e.g. Sales Report)"
+                    className="bg-transparent border-none text-xs text-white placeholder:text-zinc-600 focus:ring-0 w-48 px-2"
+                />
+                <div className="w-[1px] h-4 bg-zinc-700"></div>
+                <button
+                    onClick={handleAiDataGenerate}
+                    disabled={isGeneratingData || elements.length === 0}
+                    className="flex items-center gap-2 px-3 py-1 rounded-md text-pink-400 hover:text-pink-300 hover:bg-pink-500/10 text-xs font-medium transition-all disabled:opacity-50"
+                    title="Generate data & themes"
+                >
+                    {isGeneratingData ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    <span className="hidden lg:inline">AI Fill</span>
+                </button>
+            </div>
+
             {/* Data Controls */}
             <button
                 onClick={() => setShowDataEditor(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-surface text-zinc-400 hover:text-white text-xs font-medium transition-all border border-transparent hover:border-zinc-700"
             >
                 <Database size={14} />
-                <span>Data Source</span>
+                <span className="hidden lg:inline">Data Source</span>
             </button>
 
             <button

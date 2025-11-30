@@ -16,6 +16,8 @@ interface CanvasElementProps {
   dataContext?: Record<string, any>;
 }
 
+const CHART_PALETTE = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
+
 export const CanvasElement: React.FC<CanvasElementProps> = ({
   element,
   isSelected,
@@ -165,193 +167,313 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   const renderChart = () => {
       const chartType = element.style.chartType || 'bar';
       const showLegend = element.style.chartShowLegend !== false;
+      const showTotal = element.style.chartShowTotal || false;
+      const legendPosition = element.style.chartLegendPosition || 'bottom';
       const showGrid = element.style.chartShowGrid !== false;
       const showLabels = element.style.chartShowDataLabels || false;
       const categoryKey = element.style.chartCategoryKey || 'label';
       const series = element.series || [{ id: '1', dataKey: 'value', label: 'Value', color: '#6366f1' }];
       
       let data: any[] = [];
-      let categories: string[] = [];
+      let isError = false;
       
       // Data Resolution
       if (previewMode && element.key) {
           const rawData = resolveData(element.key, dataContext);
           if (Array.isArray(rawData)) {
               data = rawData;
-              categories = rawData.map(item => String(resolveData(categoryKey, item) || ''));
+          } else {
+              isError = true;
           }
       } else {
-          // Dummy Data
-          categories = ['Jan', 'Feb', 'Mar', 'Apr', 'May'];
-          data = categories.map(cat => {
+          // Smart Dummy Data Generation
+          // If the user hasn't set up keys yet, default to generic "Item"
+          let categories = ['Item A', 'Item B', 'Item C', 'Item D', 'Item E'];
+          
+          // Heuristic: If they set a key like 'month', 'year', 'date', switch to time-based dummy data
+          if (categoryKey.toLowerCase().includes('month')) {
+             categories = ['Jan', 'Feb', 'Mar', 'Apr', 'May'];
+          } else if (categoryKey.toLowerCase().includes('year')) {
+             categories = ['2020', '2021', '2022', '2023', '2024'];
+          } else if (categoryKey.toLowerCase().includes('day')) {
+             categories = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+          } else if (categoryKey.toLowerCase().includes('product')) {
+             categories = ['Laptop', 'Mouse', 'Screen', 'Keyboard', 'Dock'];
+          }
+
+          data = categories.map((cat, i) => {
               const row: any = { [categoryKey]: cat };
-              series.forEach(s => {
-                  row[s.dataKey] = Math.floor(Math.random() * 80) + 20;
+              series.forEach((s, idx) => {
+                  // Generate deterministic pseudo-random data based on index so it doesn't flicker wildly
+                  row[s.dataKey] = Math.floor((Math.sin(i + idx) + 1) * 40) + 20;
               });
               return row;
           });
       }
+
+      if (isError) {
+          return (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-500 p-4 border border-red-200">
+                  <BarChart size={24} className="mb-2 opacity-50" />
+                  <span className="text-[10px] font-bold uppercase">Data Error</span>
+                  <span className="text-[10px] text-center mt-1">Key <code>{element.key}</code> is not an array.</span>
+              </div>
+          );
+      }
+
+      // Calculate Total
+      const totalValue = data.reduce((acc, row) => {
+          return acc + series.reduce((sAcc, s) => {
+              const val = Number(resolveData(s.dataKey, row));
+              return sAcc + (isNaN(val) ? 0 : val);
+          }, 0);
+      }, 0);
 
       // Calculate Max for Scale
       const allValues = data.flatMap(row => series.map(s => Number(resolveData(s.dataKey, row) || 0)));
       const maxValue = Math.max(...allValues, 10) * 1.1; // 10% padding
 
       const padding = { top: 20, right: 10, bottom: 25, left: 30 };
-      const width = (element.style.width || 400); // Internal coordinate width (not px style)
-      const height = (element.style.height || 300); // Internal coordinate height
       
-      const chartWidth = width - padding.left - padding.right;
-      const chartHeight = height - padding.top - padding.bottom - (showLegend ? 30 : 0);
+      // Calculate Container Sizes based on Legend Position
+      const containerWidth = (element.style.width || 400); 
+      const containerHeight = (element.style.height || 300);
+
+      // Determine dimensions available for the actual chart (SVG) vs the legend
+      let chartAreaWidth = containerWidth;
+      let chartAreaHeight = containerHeight;
+      const legendSize = 100; // rough px for side legend width
+      const legendHeightPx = 40; // rough px for top/bottom legend height
+
+      if (showLegend) {
+          if (legendPosition === 'left' || legendPosition === 'right') {
+              chartAreaWidth = containerWidth - legendSize;
+          } else {
+              chartAreaHeight = containerHeight - legendHeightPx;
+          }
+      }
       
-      const barGroupWidth = chartWidth / data.length;
+      // Adjust chart height for title
+      if (element.content) {
+          chartAreaHeight -= 24;
+      }
+
+      const drawWidth = Math.max(0, chartAreaWidth - padding.left - padding.right);
+      const drawHeight = Math.max(0, chartAreaHeight - padding.top - padding.bottom);
+      
+      const barGroupWidth = drawWidth / (data.length || 1);
       const barWidth = (barGroupWidth * 0.7) / series.length;
+
+      // Determine Legend Items
+      let legendItems: { label: string, color: string }[] = [];
+      if (chartType === 'pie') {
+          legendItems = data.map((row, i) => ({
+              label: String(resolveData(categoryKey, row) || `Item ${i + 1}`),
+              color: CHART_PALETTE[i % CHART_PALETTE.length]
+          }));
+      } else {
+          legendItems = series.map(s => ({
+              label: s.label || s.dataKey, // Fallback to dataKey if label is empty
+              color: s.color
+          }));
+      }
+
+      // Flex container classes based on legend position
+      const isHorizontal = legendPosition === 'left' || legendPosition === 'right';
+      const containerClasses = `w-full h-full flex overflow-hidden bg-white ${isHorizontal ? 'flex-row' : 'flex-col'}`;
+      
+      // Order classes
+      const legendOrderClass = (legendPosition === 'top' || legendPosition === 'left') ? 'order-first' : 'order-last';
 
       return (
           <div className="w-full h-full flex flex-col bg-white overflow-hidden relative" style={{ color: element.style.color }}>
-             {/* Chart Title Overlay in Preview/Edit */}
+             {/* Chart Title */}
               {element.content && (
                   <h4 className="text-center font-bold text-sm text-zinc-700 py-1 shrink-0">{element.content}</h4>
               )}
               
-              <div className="flex-1 relative w-full h-full">
-                <svg viewBox={`0 0 ${width} ${height - (element.content ? 24 : 0)}`} preserveAspectRatio="none" className="w-full h-full">
-                    
-                    {/* Grid Lines */}
-                    {showGrid && (
-                        <g className="grid-lines">
-                            {[0, 0.25, 0.5, 0.75, 1].map((tick, i) => {
-                                const y = padding.top + chartHeight * (1 - tick);
-                                return (
-                                    <React.Fragment key={i}>
-                                        <line x1={padding.left} y1={y} x2={padding.left + chartWidth} y2={y} stroke="#e4e4e7" strokeDasharray="3 3" />
-                                        <text x={padding.left - 5} y={y + 3} textAnchor="end" fontSize="10" fill="#a1a1aa">
-                                            {Math.round(maxValue * tick)}
-                                        </text>
-                                    </React.Fragment>
-                                );
-                            })}
-                        </g>
+              <div className={`flex-1 ${containerClasses}`}>
+                
+                {/* SVG Chart Area */}
+                <div className="relative overflow-hidden" style={{ flex: 1 }}>
+                    {/* Total Overlay for Bar/Line */}
+                    {showTotal && chartType !== 'pie' && (
+                        <div className="absolute top-2 right-4 z-10 bg-white/80 px-2 py-1 rounded shadow-sm border border-zinc-100 pointer-events-none">
+                            <div className="text-[10px] text-zinc-500 uppercase font-semibold">Total</div>
+                            <div className="text-lg font-bold text-zinc-800 leading-none">{totalValue.toLocaleString()}</div>
+                        </div>
                     )}
 
-                    {/* Chart Area */}
-                    <g transform={`translate(${padding.left}, ${padding.top})`}>
-                        {/* Axes */}
-                        <line x1={0} y1={chartHeight} x2={chartWidth} y2={chartHeight} stroke="#71717a" strokeWidth="1" />
-                        <line x1={0} y1={0} x2={0} y2={chartHeight} stroke="#71717a" strokeWidth="1" />
-
-                        {/* Data Rendering */}
-                        {chartType === 'bar' && data.map((row, i) => {
-                            const xGroup = i * barGroupWidth + (barGroupWidth * 0.15);
-                            return series.map((s, si) => {
-                                const val = Number(resolveData(s.dataKey, row) || 0);
-                                const barH = (val / maxValue) * chartHeight;
-                                const x = xGroup + (si * barWidth);
-                                const y = chartHeight - barH;
-                                return (
-                                    <g key={`${i}-${si}`}>
-                                        <rect 
-                                            x={x} 
-                                            y={y} 
-                                            width={barWidth} 
-                                            height={barH} 
-                                            fill={s.color} 
-                                            className="hover:opacity-80 transition-opacity"
-                                        />
-                                        {showLabels && (
-                                            <text x={x + barWidth/2} y={y - 5} textAnchor="middle" fontSize="9" fill="#555">{val}</text>
-                                        )}
-                                    </g>
-                                );
-                            });
-                        })}
-
-                        {chartType === 'line' && series.map((s, si) => {
-                            const points = data.map((row, i) => {
-                                const val = Number(resolveData(s.dataKey, row) || 0);
-                                const x = (i * barGroupWidth) + (barGroupWidth / 2);
-                                const y = chartHeight - ((val / maxValue) * chartHeight);
-                                return `${x},${y}`;
-                            }).join(' ');
-                            
-                            return (
-                                <g key={si}>
-                                    <polyline points={points} fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    {data.map((row, i) => {
-                                        const val = Number(resolveData(s.dataKey, row) || 0);
-                                        const x = (i * barGroupWidth) + (barGroupWidth / 2);
-                                        const y = chartHeight - ((val / maxValue) * chartHeight);
-                                        return (
-                                            <circle key={i} cx={x} cy={y} r="3" fill="white" stroke={s.color} strokeWidth="2" />
-                                        )
-                                    })}
-                                </g>
-                            );
-                        })}
-
-                        {chartType === 'pie' && (
-                           <g transform={`translate(${chartWidth / 2}, ${chartHeight / 2})`}>
-                               {/* Simple PIE implementation: Only uses the first series for values */}
-                               {(() => {
-                                   const primarySeries = series[0];
-                                   const total = data.reduce((acc, row) => acc + Number(resolveData(primarySeries?.dataKey || '', row) || 0), 0);
-                                   let startAngle = 0;
-                                   const radius = Math.min(chartWidth, chartHeight) / 2;
-                                   
-                                   const pieColors = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
-
-                                   return data.map((row, i) => {
-                                       const val = Number(resolveData(primarySeries?.dataKey || '', row) || 0);
-                                       if (val === 0) return null;
-                                       
-                                       const sliceAngle = (val / total) * 2 * Math.PI;
-                                       const x1 = Math.cos(startAngle) * radius;
-                                       const y1 = Math.sin(startAngle) * radius;
-                                       const x2 = Math.cos(startAngle + sliceAngle) * radius;
-                                       const y2 = Math.sin(startAngle + sliceAngle) * radius;
-                                       
-                                       const largeArcFlag = sliceAngle > Math.PI ? 1 : 0;
-                                       
-                                       const pathData = [
-                                           `M 0 0`,
-                                           `L ${x1} ${y1}`,
-                                           `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-                                           `Z`
-                                       ].join(' ');
-                                       
-                                       startAngle += sliceAngle;
-                                       const color = i < pieColors.length ? pieColors[i] : '#ccc';
-
-                                       return <path key={i} d={pathData} fill={color} stroke="white" strokeWidth="1" />;
-                                   });
-                               })()}
-                           </g>
+                    <svg viewBox={`0 0 ${chartAreaWidth} ${chartAreaHeight}`} preserveAspectRatio="none" className="w-full h-full">
+                        
+                        {/* Grid Lines */}
+                        {showGrid && chartType !== 'pie' && (
+                            <g className="grid-lines">
+                                {[0, 0.25, 0.5, 0.75, 1].map((tick, i) => {
+                                    const y = padding.top + drawHeight * (1 - tick);
+                                    return (
+                                        <React.Fragment key={i}>
+                                            <line x1={padding.left} y1={y} x2={padding.left + drawWidth} y2={y} stroke="#e4e4e7" strokeDasharray="3 3" />
+                                            <text x={padding.left - 5} y={y + 3} textAnchor="end" fontSize="10" fill="#a1a1aa">
+                                                {Math.round(maxValue * tick)}
+                                            </text>
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </g>
                         )}
 
-                        {/* X-Axis Labels */}
-                        {chartType !== 'pie' && data.map((row, i) => {
-                             const label = String(resolveData(categoryKey, row) || '');
-                             const x = i * barGroupWidth + (barGroupWidth / 2);
-                             return (
-                                 <text key={i} x={x} y={chartHeight + 15} textAnchor="middle" fontSize="10" fill="#71717a">
-                                     {label.substring(0, 10)}
-                                 </text>
-                             )
-                        })}
-                    </g>
-                </svg>
-              </div>
+                        {/* Chart Content */}
+                        <g transform={`translate(${padding.left}, ${padding.top})`}>
+                            {/* Axes */}
+                            {chartType !== 'pie' && (
+                                <>
+                                    <line x1={0} y1={drawHeight} x2={drawWidth} y2={drawHeight} stroke="#71717a" strokeWidth="1" />
+                                    <line x1={0} y1={0} x2={0} y2={drawHeight} stroke="#71717a" strokeWidth="1" />
+                                </>
+                            )}
 
-              {/* Legend */}
-              {showLegend && chartType !== 'pie' && (
-                  <div className="flex items-center justify-center gap-4 py-1 shrink-0 bg-white/50">
-                      {series.map(s => (
-                          <div key={s.id} className="flex items-center gap-1.5">
-                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-                              <span className="text-[10px] text-zinc-600 font-medium">{s.label}</span>
-                          </div>
-                      ))}
-                  </div>
-              )}
+                            {/* Data Rendering */}
+                            {chartType === 'bar' && data.map((row, i) => {
+                                const xGroup = i * barGroupWidth + (barGroupWidth * 0.15);
+                                return series.map((s, si) => {
+                                    const val = Number(resolveData(s.dataKey, row) || 0);
+                                    const barH = (val / (maxValue || 1)) * drawHeight; // Prevent div by zero
+                                    const x = xGroup + (si * barWidth);
+                                    const y = drawHeight - barH;
+                                    return (
+                                        <g key={`${i}-${si}`}>
+                                            <rect 
+                                                x={x} 
+                                                y={y} 
+                                                width={barWidth} 
+                                                height={Math.max(0, barH)} 
+                                                fill={s.color} 
+                                                className="hover:opacity-80 transition-opacity"
+                                            />
+                                            {showLabels && (
+                                                <text x={x + barWidth/2} y={y - 5} textAnchor="middle" fontSize="9" fill="#555">{val}</text>
+                                            )}
+                                        </g>
+                                    );
+                                });
+                            })}
+
+                            {chartType === 'line' && series.map((s, si) => {
+                                const points = data.map((row, i) => {
+                                    const val = Number(resolveData(s.dataKey, row) || 0);
+                                    const x = (i * barGroupWidth) + (barGroupWidth / 2);
+                                    const y = drawHeight - ((val / (maxValue || 1)) * drawHeight);
+                                    return `${x},${y}`;
+                                }).join(' ');
+                                
+                                return (
+                                    <g key={si}>
+                                        <polyline points={points} fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        {data.map((row, i) => {
+                                            const val = Number(resolveData(s.dataKey, row) || 0);
+                                            const x = (i * barGroupWidth) + (barGroupWidth / 2);
+                                            const y = drawHeight - ((val / (maxValue || 1)) * drawHeight);
+                                            return (
+                                                <circle key={i} cx={x} cy={y} r="3" fill="white" stroke={s.color} strokeWidth="2" />
+                                            )
+                                        })}
+                                    </g>
+                                );
+                            })}
+
+                            {chartType === 'pie' && (
+                            <g transform={`translate(${drawWidth / 2}, ${drawHeight / 2})`}>
+                                {/* Simple PIE implementation */}
+                                {(() => {
+                                    const primarySeries = series[0];
+                                    const total = data.reduce((acc, row) => acc + Number(resolveData(primarySeries?.dataKey || '', row) || 0), 0);
+                                    let startAngle = 0;
+                                    const radius = Math.min(drawWidth, drawHeight) / 2;
+                                    
+                                    // Handle empty data
+                                    if (total === 0) return <text textAnchor="middle" fontSize="10" fill="#a1a1aa">No Data</text>;
+
+                                    const pieSlices = data.map((row, i) => {
+                                        const val = Number(resolveData(primarySeries?.dataKey || '', row) || 0);
+                                        if (val <= 0) return null;
+                                        
+                                        const sliceAngle = (val / total) * 2 * Math.PI;
+                                        const x1 = Math.cos(startAngle) * radius;
+                                        const y1 = Math.sin(startAngle) * radius;
+                                        const x2 = Math.cos(startAngle + sliceAngle) * radius;
+                                        const y2 = Math.sin(startAngle + sliceAngle) * radius;
+                                        
+                                        const largeArcFlag = sliceAngle > Math.PI ? 1 : 0;
+                                        
+                                        const pathData = [
+                                            `M 0 0`,
+                                            `L ${x1} ${y1}`,
+                                            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                                            `Z`
+                                        ].join(' ');
+                                        
+                                        const currentStart = startAngle;
+                                        startAngle += sliceAngle;
+                                        const color = CHART_PALETTE[i % CHART_PALETTE.length];
+
+                                        return (
+                                            <g key={i}>
+                                                <path d={pathData} fill={color} stroke="white" strokeWidth="1" />
+                                            </g>
+                                        );
+                                    });
+
+                                    return (
+                                        <>
+                                            {pieSlices}
+                                            {/* Donut Hole if Total is shown */}
+                                            {showTotal && (
+                                                <g>
+                                                    <circle cx={0} cy={0} r={radius * 0.6} fill="white" />
+                                                    <text x={0} y={-5} textAnchor="middle" fontSize="10" fill="#71717a" fontWeight="bold" textTransform="uppercase">Total</text>
+                                                    <text x={0} y={15} textAnchor="middle" fontSize="16" fill="#18181b" fontWeight="bold">{total.toLocaleString()}</text>
+                                                </g>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </g>
+                            )}
+
+                            {/* X-Axis Labels */}
+                            {chartType !== 'pie' && data.map((row, i) => {
+                                const label = String(resolveData(categoryKey, row) || '');
+                                const x = i * barGroupWidth + (barGroupWidth / 2);
+                                return (
+                                    <text key={i} x={x} y={drawHeight + 15} textAnchor="middle" fontSize="10" fill="#71717a">
+                                        {label.substring(0, 10)}
+                                    </text>
+                                )
+                            })}
+                        </g>
+                    </svg>
+                </div>
+
+                {/* Legend Area */}
+                {showLegend && (
+                    <div 
+                        className={`${legendOrderClass} flex flex-wrap content-center gap-x-4 gap-y-1 p-2 bg-white/50 border-zinc-100 ${isHorizontal ? 'flex-col border-l min-w-[100px] justify-center' : 'border-t justify-center min-h-[40px]'}`}
+                        style={{
+                            maxWidth: isHorizontal ? '100px' : '100%',
+                            maxHeight: isHorizontal ? '100%' : '60px',
+                            overflowY: 'auto'
+                        }}
+                    >
+                        {legendItems.map((item, i) => (
+                            <div key={i} className="flex items-center gap-1.5 mb-1">
+                                <div className="w-2.5 h-2.5 rounded-full shadow-sm shrink-0" style={{ backgroundColor: item.color }} />
+                                <span className="text-[9px] text-zinc-600 font-medium leading-none break-words">{item.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+              </div>
           </div>
       );
   };
@@ -448,11 +570,16 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       
       case 'list':
         const ListTag = element.style.listStyle === 'decimal' ? 'ol' : 'ul';
+        // Parse content: If content exists, split by newline. If not, use defaults.
+        const items = element.content 
+            ? element.content.split('\n').filter(line => line.trim() !== '')
+            : ['First item', 'Second item', 'Third item'];
+            
         return (
             <ListTag style={{ ...textStyle, listStyleType: element.style.listStyle || 'disc', paddingLeft: '20px' }} className="space-y-1">
-                <li>First item</li>
-                <li>Second item</li>
-                <li>Third item</li>
+                {items.map((item, index) => (
+                    <li key={index}>{item}</li>
+                ))}
             </ListTag>
         );
 

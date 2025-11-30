@@ -124,12 +124,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
                 label="Bulleted List" 
                 icon={List} 
                 initialStyle={{ listStyle: 'disc' }}
+                initialContent={'First Item\nSecond Item\nThird Item'}
             />
             <DraggableItem 
                 type="list" 
                 label="Numbered List" 
                 icon={ListOrdered} 
                 initialStyle={{ listStyle: 'decimal' }}
+                initialContent={'First Item\nSecond Item\nThird Item'}
             />
             
             <SectionHeader title="Data Visualization" icon={BarChart} />

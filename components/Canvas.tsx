@@ -93,7 +93,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       label,
       x: snappedX,
       y: snappedY,
-      content: initialContent || (type === 'text' ? 'New Text Block' : (type === 'barcode' || type === 'qrcode' ? '123456' : type === 'chart' ? 'New Chart' : undefined)),
+      content: initialContent || (
+        type === 'text' ? 'New Text Block' : 
+        type === 'list' ? 'Item 1\nItem 2\nItem 3' : 
+        (type === 'barcode' || type === 'qrcode' ? '123456' : 
+        type === 'chart' ? 'New Chart' : undefined)
+      ),
       key: type === 'placeholder' ? 'new_variable' : undefined,
       style: defaultStyles,
       columns: initialColumns

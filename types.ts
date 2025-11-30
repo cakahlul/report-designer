@@ -50,6 +50,8 @@ export interface ElementStyle {
   chartType?: 'bar' | 'line' | 'pie';
   chartCategoryKey?: string; // Key for X-axis or Segment Labels
   chartShowLegend?: boolean;
+  chartShowTotal?: boolean; // New property for showing total
+  chartLegendPosition?: 'top' | 'bottom' | 'left' | 'right';
   chartShowGrid?: boolean;
   chartShowDataLabels?: boolean;
   chartAxisColor?: string;

@@ -2,7 +2,7 @@
 import React from 'react';
 import { ReportElement, ElementStyle, TableColumn, ChartSeries } from '../types';
 import { motion } from 'framer-motion';
-import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List, Plus, Trash2, Palette, ChevronDown, Database, Layers } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Bold, Type, PaintBucket, BoxSelect, Maximize, Image as ImageIcon, Grid3X3, Upload, ScanLine, BarChart, List, Plus, Trash2, Palette, ChevronDown, Database, Layers, Info, Layout, Calculator } from 'lucide-react';
 
 interface PropertiesPanelProps {
   element: ReportElement | null;
@@ -348,6 +348,29 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                              <input type="checkbox" checked={element.style.chartShowGrid !== false} onChange={(e) => handleChange('style', e.target.checked, 'chartShowGrid')} className="accent-primary" />
                          </div>
                     </div>
+                    
+                    <div className="flex items-center justify-between bg-zinc-900 p-2 rounded border border-zinc-700">
+                         <div className="flex items-center gap-1.5">
+                             <Calculator size={12} className="text-zinc-400" />
+                             <span className="text-[10px] text-zinc-400">Show Total</span>
+                         </div>
+                         <input type="checkbox" checked={element.style.chartShowTotal || false} onChange={(e) => handleChange('style', e.target.checked, 'chartShowTotal')} className="accent-primary" />
+                    </div>
+
+                     {/* Legend Position */}
+                     <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-500 uppercase flex items-center gap-1"><Layout size={10}/> Legend Position</label>
+                         <select
+                            value={element.style.chartLegendPosition || 'bottom'}
+                            onChange={(e) => handleChange('style', e.target.value, 'chartLegendPosition')}
+                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:border-primary focus:outline-none"
+                        >
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                            <option value="left">Left</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
 
                     <div className="space-y-3 p-3 bg-zinc-900/50 rounded border border-zinc-800">
                         <h4 className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
@@ -386,9 +409,17 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     {/* SERIES MANAGER */}
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                <Layers size={12} /> Data Series
-                            </h3>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Layers size={12} /> Data Series
+                                </h3>
+                                <div className="group relative">
+                                    <Info size={12} className="text-zinc-600 cursor-help" />
+                                    <div className="absolute left-full top-0 ml-2 w-48 p-2 bg-zinc-800 border border-zinc-700 rounded text-[10px] text-zinc-300 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                        Map a data field (e.g. "revenue") to a visual bar or line. Add multiple series to compare metrics.
+                                    </div>
+                                </div>
+                            </div>
                             <button onClick={addSeries} className="p-1 bg-primary hover:bg-primaryHover text-white rounded transition-colors" title="Add Series">
                                 <Plus size={14} />
                             </button>
@@ -399,7 +430,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                                 <div key={series.id} className="bg-zinc-900 border border-zinc-700 rounded p-2 space-y-2 relative group">
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1 space-y-1">
-                                             <label className="text-[9px] text-zinc-500 uppercase">Series Label</label>
+                                             <label className="text-[9px] text-zinc-500 uppercase">Series Label (Legend)</label>
                                              <input 
                                                 value={series.label} 
                                                 onChange={(e) => handleSeriesUpdate(series.id, 'label', e.target.value)}
