@@ -76,13 +76,8 @@ const App: React.FC = () => {
 
   const selectedElement = elements.find((el) => el.id === selectedId) || null;
   
-  // Safe API Key retrieval
-  let API_KEY = '';
-  try {
-      if (typeof process !== 'undefined' && process.env) {
-          API_KEY = process.env.API_KEY || '';
-      }
-  } catch (e) { console.warn("Env access failed", e); }
+  // Safe API Key retrieval - Vite requires VITE_ prefix and import.meta.env
+  const API_KEY = import.meta.env.VITE_API_KEY || '';
 
   // --- History Management ---
 
